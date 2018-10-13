@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -61,6 +62,11 @@ func (db *TrackDB) Add(t Track, i ID) {
 	IDs = append(IDs, i.ID)
 }
 
+func (db *TrackDB) Get(keyID string) (Track, bool) {
+	t, err := db.tracks[keyID]
+	return t, err
+}
+
 func uptime() string {
 	now := time.Now()
 	now.Format(time.RFC3339)
@@ -101,10 +107,7 @@ func handlerIgc(w http.ResponseWriter, r *http.Request){
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		totalDistance := 0.0
-		for i := 0; i < len(track.Points)-1; i++ {
-			totalDistance += track.Points[i].Distance(track.Points[i+1])
-		}
+		totalDistance := CalculatedDistance(track)
 		var i ID
 		i.ID = ("ID" + strconv.Itoa(lastUsed))
 		t := Track{track.Header.Date,
@@ -130,6 +133,48 @@ func handlerIgc(w http.ResponseWriter, r *http.Request){
 	}
 }
 
+
+func handlerIdAndField(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(r.URL.Path, "/")
+	idExists := false
+	for i := 0; i < len(IDs); i++ {
+		if IDs[i] == strings.ToUpper(parts[4]) {
+			idExists = true
+			break
+		}
+	}
+	if !idExists {
+		http.Error(w, "ID out of range.", http.StatusNotFound)
+		return
+	}
+	t, _ := db.Get(strings.ToUpper(parts[4]))
+	if len(parts) == 5 {
+		http.Header.Set(w.Header(), "content.type", "application/json")
+		json.NewEncoder(w).Encode(t)
+	}
+	if len(parts) == 6 {
+		switch strings.ToUpper(parts[5]) {
+		case "PILOT":
+			fmt.Fprint(w, t.Pilot)
+		case "GLIDER":
+			fmt.Fprint(w, t.Glider)
+		case "GLIDER_ID":
+			fmt.Fprint(w, t.GliderId)
+		case "TRACK_LENGTH":
+			fmt.Fprint(w, t.TrackLength)
+		case "H_DATE":
+			fmt.Fprint(w, t.HeaderDate)
+		default:
+			http.Error(w, "Not a valid option", http.StatusNotFound)
+			return
+		}
+
+	}
+	if len(parts) > 6 {
+		http.Error(w, "Too many /.", http.StatusNotFound)
+	}
+}
+
 func checkURL(u string) bool {
 	check, _ := regexp.MatchString("^(http://skypolaris.org/wp-content/uploads/IGS%20Files/)(.*?)(%20)(.*?)(.igc)$", u)
 	if check == true {
@@ -137,7 +182,7 @@ func checkURL(u string) bool {
 	}
 	return false
 }
-/*  ta i bruk denne senere
+
 func CalculatedDistance(track igc.Track) float64 {
 	distance := 0.0
 	for i := 0; i < len(track.Points)-1; i++ {
@@ -145,10 +190,11 @@ func CalculatedDistance(track igc.Track) float64 {
 	}
 	return distance
 }
-*/
+
 func main(){
 	http.HandleFunc("/igcinfo/api/", handlerApi)
-	http.HandleFunc("/igcinfo/api/igc/", handlerIgc)
+	http.HandleFunc("/igcinfo/api/igc", handlerIgc)
+	http.HandleFunc("/igcinfo/api/igc/", handlerIdAndField)
 
 	http.ListenAndServe("127.0.0.1:8080", nil)
 }
