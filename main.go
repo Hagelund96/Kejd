@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,7 +23,6 @@ type Information struct {
 }
 
 type Track struct {
-	ID 			int			`json:"ID"`
 	HeaderDate  time.Time 	`json:"Header date"`
 	Pilot       string 		`json:"Pilot"`
 	Glider      string 		`json:"Glider"`
@@ -29,12 +30,35 @@ type Track struct {
 	TrackLength float64		`json:"Track length"`
 }
 
+type TrackDB struct {
+	tracks map[string]Track
+}
+
+type ID struct {
+	ID	string	`json:"id"`
+}
+
+type URL struct {
+	URL string `json:"url"`
+}
+
 var startTime time.Time
 var tracks map[int]Track
-var ID int
+var IDs []string
+var db TrackDB
+var lastUsed int
 
 func init(){
 	startTime = time.Now()
+}
+
+func (db *TrackDB) Init() {
+	db.tracks = make(map[string]Track)
+}
+
+func (db *TrackDB) Add(t Track, i ID) {
+	db.tracks[i.ID] = t
+	IDs = append(IDs, i.ID)
 }
 
 func uptime() string {
@@ -57,28 +81,63 @@ func handlerApi(w http.ResponseWriter, r *http.Request){
 
 func handlerIgc(w http.ResponseWriter, r *http.Request){
 	switch r.Method{
-	case("POST"):
-		var url string
-		err := json.NewDecoder(r.Body).Decode(&url)
-		if err != nil {
-			http.Error(w, err.Error(), 400)
+	case "POST":
+		if r.Body == nil {
+			http.Error(w, "Missing body", http.StatusBadRequest)
 			return
 		}
-		track, err := igc.ParseLocation(url)
-		tracks[ID] = Track{ID, track.Date, track.Pilot, track.GliderType, track.GliderID, CalculatedDistance(track)}
-		post, err := json.Marshal(tracks[ID].ID)
+		var u URL
+		err := json.NewDecoder(r.Body).Decode(&u)
 		if err != nil {
-			http.Error(w, err.Error(), 400)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		http.Header.Add(w.Header(), "content-type", "application/json")
-		json.NewEncoder(w).Encode(post)
-		ID++
+		if checkURL(u.URL) == false {
+			http.Error(w, "invalid url", http.StatusBadRequest)
+			return
+		}
+		track, err := igc.ParseLocation(u.URL)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		totalDistance := 0.0
+		for i := 0; i < len(track.Points)-1; i++ {
+			totalDistance += track.Points[i].Distance(track.Points[i+1])
+		}
+		var i ID
+		i.ID = ("ID" + strconv.Itoa(lastUsed))
+		t := Track{track.Header.Date,
+			track.Pilot,
+			track.GliderType,
+			track.GliderID,
+			totalDistance}
+		lastUsed++
+		if db.tracks == nil {
+			db.Init()
+		}
+		db.Add(t, i)
+		return
+	case "GET":
+		if len(IDs) == 0 {
+			IDs = make([]string, 0)
+		}
+		json.NewEncoder(w).Encode(IDs)
+		return
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 }
 
+func checkURL(u string) bool {
+	check, _ := regexp.MatchString("^(http://skypolaris.org/wp-content/uploads/IGS%20Files/)(.*?)(%20)(.*?)(.igc)$", u)
+	if check == true {
+		return true
+	}
+	return false
+}
+/*  ta i bruk denne senere
 func CalculatedDistance(track igc.Track) float64 {
 	distance := 0.0
 	for i := 0; i < len(track.Points)-1; i++ {
@@ -86,10 +145,10 @@ func CalculatedDistance(track igc.Track) float64 {
 	}
 	return distance
 }
-
+*/
 func main(){
 	http.HandleFunc("/igcinfo/api/", handlerApi)
-	http.HandleFunc("/igcinfo/api/igc", handlerIgc)
+	http.HandleFunc("/igcinfo/api/igc/", handlerIgc)
 
 	http.ListenAndServe("127.0.0.1:8080", nil)
 }
