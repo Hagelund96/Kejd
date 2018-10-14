@@ -1,4 +1,5 @@
 # Kejd
+# https://kejd.herokuapp.com/igcinfo
 IGC info. Cloud technologies imt2681.
 # IMPORTANT
 # To get the POST to work the / at the end of https://kejd.herokuapp.com/igcinfo/api/igc/ have to be included.
