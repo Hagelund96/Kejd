@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -192,9 +193,17 @@ func CalculatedDistance(track igc.Track) float64 {
 }
 
 func main(){
+	db.Init()
+	var p string
+	if port := os.Getenv("PORT"); port != "" {
+		p = ":" + port
+	} else {
+		p = ":8080"
+	}
 	http.HandleFunc("/igcinfo/api/", handlerApi)
 	http.HandleFunc("/igcinfo/api/igc", handlerIgc)
 	http.HandleFunc("/igcinfo/api/igc/", handlerIdAndField)
 
-	http.ListenAndServe("127.0.0.1:8080", nil)
+	http.ListenAndServe(p, nil)
+
 }
