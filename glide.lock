@@ -1,0 +1,14 @@
+hash: 6d008de0cacaf02bec47ea5a351c0e5764edb854f2fdd87a0e74b1249870bdaf
+updated: 2018-10-14T21:16:07.879567316+02:00
+imports:
+- name: github.com/golang/geo
+  version: 476085157cff9aaeef4d4f124649436542d4114a
+  subpackages:
+  - r1
+  - r2
+  - r3
+  - s1
+  - s2
+- name: github.com/marni/goigc
+  version: 35300268c031cea36d638a6793146fccd1cbcdd1
+testImports: []

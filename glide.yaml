@@ -1,0 +1,4 @@
+package: github.com/Hagelund96/Kejd
+import:
+- package: github.com/marni/goigc
+  version: ^0.1.0
