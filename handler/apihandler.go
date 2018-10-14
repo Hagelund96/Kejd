@@ -30,6 +30,7 @@ func checkURL(u string) bool {
 }
 
 func replyWithAllTracksId(w http.ResponseWriter, db _struct.TrackDB) {
+	http.Header.Set(w.Header(), "content-type", "application/json")
 	if len(_struct.IDs) == 0 {
 		_struct.IDs = make([]string, 0)
 	}
@@ -38,26 +39,29 @@ func replyWithAllTracksId(w http.ResponseWriter, db _struct.TrackDB) {
 }
 
 func replyWithTracksId(w http.ResponseWriter, db _struct.TrackDB, id string) {
+	http.Header.Set(w.Header(), "content-type", "application/json")
 	t, _ := db.Get(strings.ToUpper(id))
-	http.Header.Set(w.Header(), "content.type", "application/json")
-	json.NewEncoder(w).Encode(t)
+	api := _struct.Track{t.HeaderDate, t.Pilot, t.Glider, t.GliderId, t.TrackLength}
+	json.NewEncoder(w).Encode(api)
 }
 
 func replyWithField(w http.ResponseWriter, db _struct.TrackDB, id string, field string) {
-	http.Header.Set(w.Header(), "content.type", "application/json")
+	http.Header.Set(w.Header(), "content-type", "application/json")
 	t, _ := db.Get(strings.ToUpper(id))
+
+	api := _struct.Track{t.HeaderDate, t.Pilot, t.Glider, t.GliderId, t.TrackLength}
 
 	switch strings.ToUpper(field) {
 	case "PILOT":
-		json.NewEncoder(w).Encode(t.Pilot)
+		json.NewEncoder(w).Encode(api.Pilot)
 	case "GLIDER":
-		json.NewEncoder(w).Encode(t.Glider)
+		json.NewEncoder(w).Encode(api.Glider)
 	case "GLIDER_ID":
-		json.NewEncoder(w).Encode(t.GliderId)
+		json.NewEncoder(w).Encode(api.GliderId)
 	case "TRACK_LENGTH":
-		json.NewEncoder(w).Encode(t.TrackLength)
+		json.NewEncoder(w).Encode(api.TrackLength)
 	case "H_DATE":
-		json.NewEncoder(w).Encode(t.HeaderDate)
+		json.NewEncoder(w).Encode(api.HeaderDate)
 	default:
 		http.Error(w, "Not a valid option", http.StatusNotFound)
 		return
