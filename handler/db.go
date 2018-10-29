@@ -6,6 +6,7 @@ import (
 	"github.com/mongodb/mongo-go-driver/bson"
 	"github.com/mongodb/mongo-go-driver/mongo"
 	"log"
+	"net/http"
 )
 
 func mongoConnect() *mongo.Client {
@@ -103,4 +104,17 @@ func getTrackID(client *mongo.Client) string {
 	}
 	ids += "]"
 	return ids
+}
+
+func getTrack1(client *mongo.Client, id string, w http.ResponseWriter) _struct.Track {
+	db := client.Database("paragliding")     // `paragliding` Database
+	collection := db.Collection("tracks") // `track` Collection
+	filter := bson.NewDocument(bson.EC.String("uniqueid", ""+id+""))
+	resTrack := _struct.Track{}
+	err := collection.FindOne(context.Background(), filter).Decode(&resTrack)
+	if err != nil {
+		http.Error(w, "File not found!", 404)
+	}
+	return resTrack
+
 }

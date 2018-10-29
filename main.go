@@ -21,8 +21,10 @@ func main() {
 	//different handlers for urls
 	http.HandleFunc("/paragliding/", handler.Handler)
 	http.HandleFunc("/paragliding/api/", handler.HandlerApi)
-	http.HandleFunc("/paragliding/api/track/", handler.HandlerIgc)
+	http.HandleFunc("/paragliding/api/track/", handler.HandlerTrack)
+	http.HandleFunc("/paragliding/api/track/{id}", handler.HandlerTrackId)
+	http.HandleFunc("/paragliding/api/track/{id}/{field}", handler.HandlerTrackIdFIeld)
+
 
 	http.ListenAndServe(p, nil)
-	//http.ListenAndServe(":8080", nil)
 }

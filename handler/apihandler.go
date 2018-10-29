@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Hagelund96/Kejd/struct"
+	"github.com/gorilla/mux"
 	"github.com/marni/goigc"
 	"log"
 	"math/rand"
@@ -34,6 +35,11 @@ func checkURL(u string) bool {
 		return true
 	}
 	return false
+}
+
+func FloatToString(inputNum float64) string {
+
+	return strconv.FormatFloat(inputNum, 'f', 4, 64)
 }
 
 //parses ids into json, and encodes and outputs whole array of ids
@@ -78,7 +84,7 @@ func replyWithField(w http.ResponseWriter, db _struct.TrackDB, id string, field 
 	}
 }
 
-func HandlerIgc(w http.ResponseWriter, r *http.Request) {
+func HandlerTrack(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	//handling POST /api/igc/   **NEED TO HAVE SLASH, DOES NOT WORK WIHTOUT**
 	case "POST":
@@ -191,44 +197,103 @@ func HandlerApi(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//Old functions that we went away from, left behind to show working progress
-/*func handlerIdAndField(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	idExists := false
-	for i := 0; i < len(IDs); i++ {
-		if IDs[i] == strings.ToUpper(parts[4]) {
-			idExists = true
-			break
-		}
-	}
-	if !idExists {
-		http.Error(w, "ID out of range.", http.StatusNotFound)
+func HandlerTrackId(w http.ResponseWriter, r *http.Request) {
+	//Handling /igcinfo/api/igc/<id>
+	if r.Method != "GET" {
+		http.Error(w, "501 - Method not implemented", http.StatusNotImplemented)
 		return
 	}
-	t, _ := db.Get(strings.ToUpper(parts[4]))
-	if len(parts) == 5 {
-		http.Header.Set(w.Header(), "content.type", "application/json")
-		json.NewEncoder(w).Encode(t)
+
+	w.Header().Set("Content-Type", "application/json")
+	idURL := mux.Vars(r)
+
+	rNum, _ := regexp.Compile(`[0-9]+`)
+	if !rNum.MatchString(idURL["id"]) {
+		http.Error(w, "400 - Bad Request", http.StatusBadRequest)
+		return
 	}
-	if len(parts) == 6 {
-		switch strings.ToUpper(parts[5]) {
-		case "PILOT":
-			fmt.Fprint(w, t.Pilot)
-		case "GLIDER":
-			fmt.Fprint(w, t.Glider)
-		case "GLIDER_ID":
-			fmt.Fprint(w, t.GliderId)
-		case "TRACK_LENGTH":
-			fmt.Fprint(w, t.TrackLength)
-		case "H_DATE":
-			fmt.Fprint(w, t.HeaderDate)
-		default:
-			http.Error(w, "Not a valid option", http.StatusNotFound)
-			return
+
+	client := mongoConnect()
+
+	collection := client.Database("paragliding").Collection("tracks")
+
+	cursor, err := collection.Find(context.Background(), nil, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 'Close' the cursor
+	defer cursor.Close(context.Background())
+
+	track := _struct.Track{}
+	//URL := &_url{}
+
+	for cursor.Next(context.Background()) {
+		err = cursor.Decode(&track)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if track.UniqueID == idURL["id"] {
+			fmt.Fprint(w, "{\n\"H_date\":\""+track.HeaderDate.String()+"\",\n\"pilot\":\""+track.Pilot+"\",\n\"glider\":\""+track.Glider+"\",\n\"glider_id\":\""+track.GliderId+"\",\n\"length\":\""+FloatToString(track.TrackLength)+"\",\n\"track_src_url\":\""+track.URL+"\"\n}")
+
+		} else {
+			//Handling if user type different id from ids stored
+			http.Error(w, "404 - The trackInfo with that id doesn't exists in our database ", http.StatusNotFound)
+
 		}
 
 	}
-	if len(parts) > 6 {
-		http.Error(w, "Too many /.", http.StatusNotFound)
+
+}
+
+func HandlerTrackIdFIeld(w http.ResponseWriter, r *http.Request) {
+
+	//Handling for GET /api/igc/<id>/<field>
+	w.Header().Set("Content-Type", "application/json")
+
+	urlFields := mux.Vars(r)
+
+	var rNum, _ = regexp.Compile(`[a-zA-Z_]+`)
+
+	//attributes := &Attributes{}
+
+	// Regular Expression for IDs
+
+	regExID, _ := regexp.Compile("[0-9]+")
+
+	if !regExID.MatchString(urlFields["id"]) {
+		http.Error(w, "400 - Bad Request, you entered an invalid ID in URL.", http.StatusBadRequest)
+		return
 	}
-}*/
+
+	if !rNum.MatchString(urlFields["field"]) {
+		http.Error(w, "400 - Bad Request, wrong parameters", http.StatusBadRequest)
+		return
+	}
+	client := mongoConnect()
+
+	trackDB := _struct.Track{}
+
+	trackDB = getTrack1(client, urlFields["id"], w)
+	// Taking the field variable from the URL path and converting it to lower case to skip some potential errors
+	field := urlFields["field"]
+
+	switch field {
+	case "pilot":
+		fmt.Fprint(w, trackDB.Pilot)
+	case "glider":
+		fmt.Fprint(w, trackDB.Glider)
+	case "glider_id":
+		fmt.Fprint(w, trackDB.GliderId)
+	case "h_date":
+		fmt.Fprint(w, trackDB.HeaderDate)
+	case "track_length":
+		fmt.Fprint(w, trackDB.TrackLength)
+	case "track_src_url":
+		fmt.Fprint(w, trackDB.URL)
+	default:
+		http.Error(w, "", 404)
+	}
+
+}
