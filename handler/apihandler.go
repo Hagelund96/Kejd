@@ -204,7 +204,7 @@ func HandlerTrackId(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	http.Header.Set(w.Header(), "content-type", "application/json")
 	idURL := mux.Vars(r)
 
 	rNum, _ := regexp.Compile(`[0-9]+`)
@@ -235,8 +235,8 @@ func HandlerTrackId(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if track.UniqueID == idURL["id"] {
-			fmt.Fprint(w, "{\n\"H_date\":\""+track.HeaderDate.String()+"\",\n\"pilot\":\""+track.Pilot+"\",\n\"glider\":\""+track.Glider+"\",\n\"glider_id\":\""+track.GliderId+"\",\n\"length\":\""+FloatToString(track.TrackLength)+"\",\n\"track_src_url\":\""+track.URL+"\"\n}")
-
+			api := _struct.Track{track.UniqueID, track.Pilot, track.Glider, track.GliderId, track.TrackLength, track.HeaderDate, track.URL, track.TimeRecorded}
+			json.NewEncoder(w).Encode(api)
 		} else {
 			//Handling if user type different id from ids stored
 			http.Error(w, "404 - The trackInfo with that id doesn't exists in our database ", http.StatusNotFound)
@@ -250,7 +250,7 @@ func HandlerTrackId(w http.ResponseWriter, r *http.Request) {
 func HandlerTrackIdFIeld(w http.ResponseWriter, r *http.Request) {
 
 	//Handling for GET /api/igc/<id>/<field>
-	w.Header().Set("Content-Type", "application/json")
+	http.Header.Set(w.Header(), "content-type", "application/json")
 
 	urlFields := mux.Vars(r)
 
@@ -279,21 +279,28 @@ func HandlerTrackIdFIeld(w http.ResponseWriter, r *http.Request) {
 	// Taking the field variable from the URL path and converting it to lower case to skip some potential errors
 	field := urlFields["field"]
 
-	switch field {
-	case "pilot":
-		fmt.Fprint(w, trackDB.Pilot)
-	case "glider":
-		fmt.Fprint(w, trackDB.Glider)
-	case "glider_id":
-		fmt.Fprint(w, trackDB.GliderId)
-	case "h_date":
-		fmt.Fprint(w, trackDB.HeaderDate)
-	case "track_length":
-		fmt.Fprint(w, trackDB.TrackLength)
-	case "track_src_url":
-		fmt.Fprint(w, trackDB.URL)
+	api := _struct.Track{trackDB.UniqueID, trackDB.Pilot, trackDB.Glider, trackDB.GliderId, trackDB.TrackLength, trackDB.HeaderDate, trackDB.URL, trackDB.TimeRecorded}
+
+	switch strings.ToUpper(field) {
+	case "UNIQUEID":
+		json.NewEncoder(w).Encode(api.UniqueID)
+	case "PILOT":
+		json.NewEncoder(w).Encode(api.Pilot)
+	case "GLIDER":
+		json.NewEncoder(w).Encode(api.Glider)
+	case "GLIDER_ID":
+		json.NewEncoder(w).Encode(api.GliderId)
+	case "TRACK_LENGTH":
+		json.NewEncoder(w).Encode(api.TrackLength)
+	case "H_DATE":
+		json.NewEncoder(w).Encode(api.HeaderDate)
+	case "URL":
+		json.NewEncoder(w).Encode(api.URL)
+	case "TIMERECORDED":
+		json.NewEncoder(w).Encode(api.TimeRecorded)
 	default:
-		http.Error(w, "", 404)
+		http.Error(w, "Not a valid option", http.StatusNotFound)
+		return
 	}
 
 }
