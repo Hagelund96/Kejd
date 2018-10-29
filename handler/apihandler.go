@@ -1,13 +1,18 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/Hagelund96/Kejd/struct"
 	"github.com/marni/goigc"
+	"log"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //checks if the given id exists
@@ -45,7 +50,7 @@ func replyWithAllTracksId(w http.ResponseWriter, db _struct.TrackDB) {
 func replyWithTracksId(w http.ResponseWriter, db _struct.TrackDB, id string) {
 	http.Header.Set(w.Header(), "content-type", "application/json")
 	t, _ := db.Get(strings.ToUpper(id))
-	api := _struct.Track{t.HeaderDate, t.Pilot, t.Glider, t.GliderId, t.TrackLength}
+	api := _struct.Track{t.UniqueID, t.Pilot, t.Glider, t.GliderId, t.TrackLength, t.HeaderDate, t.URL, t.TimeRecorded}
 	json.NewEncoder(w).Encode(api)
 }
 
@@ -54,7 +59,7 @@ func replyWithField(w http.ResponseWriter, db _struct.TrackDB, id string, field 
 	http.Header.Set(w.Header(), "content-type", "application/json")
 	t, _ := db.Get(strings.ToUpper(id))
 
-	api := _struct.Track{t.HeaderDate, t.Pilot, t.Glider, t.GliderId, t.TrackLength}
+	api := _struct.Track{t.UniqueID, t.Pilot, t.Glider, t.GliderId, t.TrackLength, t.HeaderDate, t.URL, t.TimeRecorded}
 
 	switch strings.ToUpper(field) {
 	case "PILOT":
@@ -100,88 +105,72 @@ func HandlerIgc(w http.ResponseWriter, r *http.Request) {
 		}
 		//calculates total distance
 		totalDistance := _struct.CalculatedDistance(track)
-		var i _struct.ID
-		i.ID = ("ID" + strconv.Itoa(_struct.LastUsed))
-		t := _struct.Track{track.Header.Date,
-			track.Pilot,
-			track.GliderType,
-			track.GliderID,
-			totalDistance}
-		//counts up last used
-		_struct.LastUsed++
-		_struct.Db.Add(t, i)
+
+		URL := _struct.URL{}
+
+		ID := rand.Intn(1000)
+
+		track.UniqueID = strconv.Itoa(ID)
+
+		trackFile := _struct.Track{}
+
+		timestamp := time.Now().Second()
+		timestamp = timestamp * 1000
+
+		client := mongoConnect()
+
+		collection := client.Database("paragliding").Collection("tracks")
+
+		// Checking for duplicates so that the user doesn't add into the database igc files with the same URL
+		duplicate := urlInMongo(URL.URL, collection)
+
+		if !duplicate {
+
+			trackFile = _struct.Track{
+				track.UniqueID,
+				track.Pilot,
+				track.GliderType,
+				track.GliderID,
+				totalDistance,
+				track.Date,
+				URL.URL, time.Now()}
+
+			res, err := collection.InsertOne(context.Background(), trackFile)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			id := res.InsertedID
+
+			if id == nil {
+				http.Error(w, "", 300)
+			}
+
+			// Encoding the ID of the track that was just added to DB
+			fmt.Fprint(w, "{\n\"id\":\""+track.UniqueID+"\"\n}")
+
+			//triggerWhenTrackIsAdded()
+
+		} else {
+
+			trackInDB := getTrack(client, URL.URL)
+			// If there is another file in igcFilesDB with that URL return and tell the user that that IGC FILE is already in the database
+			http.Error(w, "409 Conflict - The Igc File you entered is already in our database!", http.StatusConflict)
+			fmt.Fprintln(w, "\nThe file you entered has the following ID: ", trackInDB.UniqueID)
+			return
+
+		}
+
+
+
 		return
 		//Handling all GETs after /api/
 	case "GET":
-		parts := strings.Split(r.URL.Path, "/")
+		client := mongoConnect()
 
-		switch len(parts) {
-		//handling /api/igc/ and /api/igc/id
-		case 5:
-			if parts[4] == "" {
-				replyWithAllTracksId(w, _struct.Db)
-			} else if checkId(parts[4]) {
-				replyWithTracksId(w, _struct.Db, parts[4])
-			} else {
-				http.Error(w, http.StatusText(404), 404)
-			}
-		case 6:
-			//handling /api/igc/id/ and /api/igc/id/field
+		ids := getTrackID(client)
 
-			if parts[5] == "" {
-				if !checkId(parts[4]) /*!idExists*/ {
-					http.Error(w, "ID out of range.", http.StatusNotFound)
-					return
-				} else {
-					replyWithTracksId(w, _struct.Db, parts[4])
-				}
-			} else {
-				if checkId(parts[4]) {
-					replyWithField(w, _struct.Db, parts[4], parts[5])
-				} else {
-					http.Error(w, "Not a valid request", http.StatusBadRequest)
-				}
-			}
-			//handling /api/igc/id/field/
-		case 7:
-			if parts[6] == "" {
-				if checkId(parts[4]) {
-					replyWithField(w, _struct.Db, parts[4], parts[5])
-				} else {
-					http.Error(w, "Not a valid request", http.StatusBadRequest)
-				}
-			} else {
-				http.Error(w, "Not a valid request", http.StatusBadRequest)
-			}
-		}
-
-		//if instead of case, left behind to show working progress
-		/*if len(parts) == 5 {
-				if parts[4] == ""{
-					replyWithAllTracksId(w, _struct.Db)
-				} else {
-					http.Error(w, http.StatusText(404), 404)
-				}
-			} else if (parts[5] == "" && len(parts) == 6) || len(parts) == 5 {
-
-				if !checkId(parts[4]) {
-					http.Error(w, "ID out of range.", http.StatusNotFound)
-					return
-				} else {
-					replyWithTracksId(w, _struct.Db, parts[4])
-				}
-			} else if (parts[6] == "" && len(parts) == 7) || len(parts) == 6 {
-				if checkId(parts[4]) {
-					replyWithField(w, _struct.Db, parts[4], parts[5])
-				} else {
-					http.Error(w, "Not a valid request", http.StatusBadRequest)
-				}
-			} else {
-				http.Error(w, "Not a valid request", http.StatusBadRequest)
-			}
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return*/
+		fmt.Fprint(w, ids)
 	}
 }
 

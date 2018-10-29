@@ -8,11 +8,14 @@ import (
 
 //struct
 type Track struct {
-	HeaderDate  time.Time `json:"Header date"`
+	UniqueID     string
 	Pilot       string    `json:"Pilot"`
 	Glider      string    `json:"Glider"`
 	GliderId    string    `json:"Glider id"`
 	TrackLength float64   `json:"Track length"`
+	HeaderDate  time.Time `json:"Header date"`
+	URL          string
+	TimeRecorded time.Time
 }
 
 //struct
