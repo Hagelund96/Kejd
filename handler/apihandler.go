@@ -185,6 +185,11 @@ func HandlerIgc(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func Handler(w http.ResponseWriter, r *http.Request) {
+	// Redirect to /paragliding/api
+	http.Redirect(w, r, "/paragliding/api", 302)
+}
+
 //handler for /api shows uptime description and version in json
 func HandlerApi(w http.ResponseWriter, r *http.Request) {
 	http.Header.Add(w.Header(), "content-type", "application/json")
