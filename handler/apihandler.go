@@ -304,3 +304,37 @@ func HandlerTrackIdFIeld(w http.ResponseWriter, r *http.Request) {
 	}
 
 }
+
+func AdminAPITracksCount(w http.ResponseWriter, r *http.Request) {
+
+	//w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != "GET" {
+		http.Error(w, "501 - Method not implemennted", http.StatusNotImplemented)
+		return
+	}
+
+	client := mongoConnect()
+
+	fmt.Fprintf(w, "Current count of the tracks in DB is: %d", countAllTracks(client))
+}
+
+// Handles path: DELETE /admin/api/track
+// It only works with DELETE method, and this handler deletes all tracks in the DB
+func AdminAPITracks(w http.ResponseWriter, r *http.Request) {
+
+	//w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != "DELETE" {
+		http.Error(w, "501 - Method not implemented", http.StatusNotImplemented)
+		return
+	}
+
+	client := mongoConnect()
+
+	// Notifying the admin first for the current count of the track
+	fmt.Fprintf(w, "Count of the tracks removed from DB is: %d", countAllTracks(client))
+
+	// Deleting all the track in DB
+	deleteAllTracks(client)
+}

@@ -118,3 +118,21 @@ func getTrack1(client *mongo.Client, id string, w http.ResponseWriter) _struct.T
 	return resTrack
 
 }
+
+func countAllTracks(client *mongo.Client) int64 {
+	db := client.Database("paragliding")
+	collection := db.Collection("tracks")
+
+	// Count the tracks
+	count, _ := collection.Count(context.Background(), nil, nil)
+
+	return count
+}
+
+func deleteAllTracks(client *mongo.Client) {
+	db := client.Database("paragliding")
+	collection := db.Collection("tracks")
+
+	// Delete the tracks
+	collection.DeleteMany(context.Background(), bson.NewDocument())
+}

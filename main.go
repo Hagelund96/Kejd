@@ -24,6 +24,8 @@ func main() {
 	http.HandleFunc("/paragliding/api/track/", handler.HandlerTrack)
 	http.HandleFunc("/paragliding/api/track/{id}", handler.HandlerTrackId)
 	http.HandleFunc("/paragliding/api/track/{id}/{field}", handler.HandlerTrackIdFIeld)
+	http.HandleFunc("/paragliding/admin/api/tracks_count", handler.AdminAPITracksCount)
+	http.HandleFunc("/paragliding/admin/api/tracks", handler.AdminAPITracks)
 
 
 	http.ListenAndServe(p, nil)
