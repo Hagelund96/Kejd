@@ -10,23 +10,15 @@ import (
 //main function for application. Initialises storage database
 func main() {
 	_struct.Db.Init()
-
 	var p string
 	if port := os.Getenv("PORT"); port != "" {
 		p = ":" + port
 	} else {
 		p = ":8080"
 	}
-
 	//different handlers for urls
-	http.HandleFunc("/paragliding/", handler.Handler)
-	http.HandleFunc("/paragliding/api/", handler.HandlerApi)
-	http.HandleFunc("/paragliding/api/track/", handler.HandlerTrack)
-	http.HandleFunc("/paragliding/api/track/{id}", handler.HandlerTrackId)
-	http.HandleFunc("/paragliding/api/track/{id}/{field}", handler.HandlerTrackIdFIeld)
-	http.HandleFunc("/paragliding/admin/api/tracks_count", handler.AdminAPITracksCount)
-	http.HandleFunc("/paragliding/admin/api/tracks", handler.AdminAPITracks)
-
+	http.HandleFunc("/igcinfo/api/", handler.HandlerApi)
+	http.HandleFunc("/igcinfo/api/igc/", handler.HandlerIgc)
 
 	http.ListenAndServe(p, nil)
 }

@@ -1,19 +1,13 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/Hagelund96/Kejd/struct"
-	"github.com/gorilla/mux"
 	"github.com/marni/goigc"
-	"log"
-	"math/rand"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
 
 //checks if the given id exists
@@ -37,11 +31,6 @@ func checkURL(u string) bool {
 	return false
 }
 
-func FloatToString(inputNum float64) string {
-
-	return strconv.FormatFloat(inputNum, 'f', 4, 64)
-}
-
 //parses ids into json, and encodes and outputs whole array of ids
 func replyWithAllTracksId(w http.ResponseWriter, db _struct.TrackDB) {
 	http.Header.Set(w.Header(), "content-type", "application/json")
@@ -56,7 +45,7 @@ func replyWithAllTracksId(w http.ResponseWriter, db _struct.TrackDB) {
 func replyWithTracksId(w http.ResponseWriter, db _struct.TrackDB, id string) {
 	http.Header.Set(w.Header(), "content-type", "application/json")
 	t, _ := db.Get(strings.ToUpper(id))
-	api := _struct.Track{t.UniqueID, t.Pilot, t.Glider, t.GliderId, t.TrackLength, t.HeaderDate, t.URL, t.TimeRecorded}
+	api := _struct.Track{t.HeaderDate, t.Pilot, t.Glider, t.GliderId, t.TrackLength}
 	json.NewEncoder(w).Encode(api)
 }
 
@@ -65,7 +54,7 @@ func replyWithField(w http.ResponseWriter, db _struct.TrackDB, id string, field 
 	http.Header.Set(w.Header(), "content-type", "application/json")
 	t, _ := db.Get(strings.ToUpper(id))
 
-	api := _struct.Track{t.UniqueID, t.Pilot, t.Glider, t.GliderId, t.TrackLength, t.HeaderDate, t.URL, t.TimeRecorded}
+	api := _struct.Track{t.HeaderDate, t.Pilot, t.Glider, t.GliderId, t.TrackLength}
 
 	switch strings.ToUpper(field) {
 	case "PILOT":
@@ -84,7 +73,7 @@ func replyWithField(w http.ResponseWriter, db _struct.TrackDB, id string, field 
 	}
 }
 
-func HandlerTrack(w http.ResponseWriter, r *http.Request) {
+func HandlerIgc(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	//handling POST /api/igc/   **NEED TO HAVE SLASH, DOES NOT WORK WIHTOUT**
 	case "POST":
@@ -111,78 +100,88 @@ func HandlerTrack(w http.ResponseWriter, r *http.Request) {
 		}
 		//calculates total distance
 		totalDistance := _struct.CalculatedDistance(track)
-
-		URL := _struct.URL{}
-
-		ID := rand.Intn(1000)
-
-		track.UniqueID = strconv.Itoa(ID)
-
-		trackFile := _struct.Track{}
-
-		timestamp := time.Now().Second()
-		timestamp = timestamp * 1000
-
-		client := mongoConnect()
-
-		collection := client.Database("paragliding").Collection("tracks")
-
-		// Checking for duplicates so that the user doesn't add into the database igc files with the same URL
-		duplicate := urlInMongo(URL.URL, collection)
-
-		if !duplicate {
-
-			trackFile = _struct.Track{
-				track.UniqueID,
-				track.Pilot,
-				track.GliderType,
-				track.GliderID,
-				totalDistance,
-				track.Date,
-				URL.URL, time.Now()}
-
-			res, err := collection.InsertOne(context.Background(), trackFile)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			id := res.InsertedID
-
-			if id == nil {
-				http.Error(w, "", 300)
-			}
-
-			// Encoding the ID of the track that was just added to DB
-			fmt.Fprint(w, "{\n\"id\":\""+track.UniqueID+"\"\n}")
-
-			//triggerWhenTrackIsAdded()
-
-		} else {
-
-			trackInDB := getTrack(client, URL.URL)
-			// If there is another file in igcFilesDB with that URL return and tell the user that that IGC FILE is already in the database
-			http.Error(w, "409 Conflict - The Igc File you entered is already in our database!", http.StatusConflict)
-			fmt.Fprintln(w, "\nThe file you entered has the following ID: ", trackInDB.UniqueID)
-			return
-
-		}
-
-
-
+		var i _struct.ID
+		i.ID = ("ID" + strconv.Itoa(_struct.LastUsed))
+		t := _struct.Track{track.Header.Date,
+			track.Pilot,
+			track.GliderType,
+			track.GliderID,
+			totalDistance}
+		//counts up last used
+		_struct.LastUsed++
+		_struct.Db.Add(t, i)
 		return
 		//Handling all GETs after /api/
 	case "GET":
-		client := mongoConnect()
+		parts := strings.Split(r.URL.Path, "/")
 
-		ids := getTrackID(client)
+		switch len(parts) {
+		//handling /api/igc/ and /api/igc/id
+		case 5:
+			if parts[4] == "" {
+				replyWithAllTracksId(w, _struct.Db)
+			} else if checkId(parts[4]) {
+				replyWithTracksId(w, _struct.Db, parts[4])
+			} else {
+				http.Error(w, http.StatusText(404), 404)
+			}
+		case 6:
+			//handling /api/igc/id/ and /api/igc/id/field
 
-		fmt.Fprint(w, ids)
+			if parts[5] == "" {
+				if !checkId(parts[4]) /*!idExists*/ {
+					http.Error(w, "ID out of range.", http.StatusNotFound)
+					return
+				} else {
+					replyWithTracksId(w, _struct.Db, parts[4])
+				}
+			} else {
+				if checkId(parts[4]) {
+					replyWithField(w, _struct.Db, parts[4], parts[5])
+				} else {
+					http.Error(w, "Not a valid request", http.StatusBadRequest)
+				}
+			}
+			//handling /api/igc/id/field/
+		case 7:
+			if parts[6] == "" {
+				if checkId(parts[4]) {
+					replyWithField(w, _struct.Db, parts[4], parts[5])
+				} else {
+					http.Error(w, "Not a valid request", http.StatusBadRequest)
+				}
+			} else {
+				http.Error(w, "Not a valid request", http.StatusBadRequest)
+			}
+		}
+
+		//if instead of case, left behind to show working progress
+		/*if len(parts) == 5 {
+				if parts[4] == ""{
+					replyWithAllTracksId(w, _struct.Db)
+				} else {
+					http.Error(w, http.StatusText(404), 404)
+				}
+			} else if (parts[5] == "" && len(parts) == 6) || len(parts) == 5 {
+				if !checkId(parts[4]) {
+					http.Error(w, "ID out of range.", http.StatusNotFound)
+					return
+				} else {
+					replyWithTracksId(w, _struct.Db, parts[4])
+				}
+			} else if (parts[6] == "" && len(parts) == 7) || len(parts) == 6 {
+				if checkId(parts[4]) {
+					replyWithField(w, _struct.Db, parts[4], parts[5])
+				} else {
+					http.Error(w, "Not a valid request", http.StatusBadRequest)
+				}
+			} else {
+				http.Error(w, "Not a valid request", http.StatusBadRequest)
+			}
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return*/
 	}
-}
-
-func Handler(w http.ResponseWriter, r *http.Request) {
-	// Redirect to /paragliding/api
-	http.Redirect(w, r, "/paragliding/api", 302)
 }
 
 //handler for /api shows uptime description and version in json
@@ -197,144 +196,43 @@ func HandlerApi(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func HandlerTrackId(w http.ResponseWriter, r *http.Request) {
-	//Handling /igcinfo/api/igc/<id>
-	if r.Method != "GET" {
-		http.Error(w, "501 - Method not implemented", http.StatusNotImplemented)
-		return
-	}
-
-	http.Header.Set(w.Header(), "content-type", "application/json")
-	idURL := mux.Vars(r)
-
-	rNum, _ := regexp.Compile(`[0-9]+`)
-	if !rNum.MatchString(idURL["id"]) {
-		http.Error(w, "400 - Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	client := mongoConnect()
-
-	collection := client.Database("paragliding").Collection("tracks")
-
-	cursor, err := collection.Find(context.Background(), nil, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// 'Close' the cursor
-	defer cursor.Close(context.Background())
-
-	track := _struct.Track{}
-	//URL := &_url{}
-
-	for cursor.Next(context.Background()) {
-		err = cursor.Decode(&track)
-		if err != nil {
-			log.Fatal(err)
+//Old functions that we went away from, left behind to show working progress
+/*func handlerIdAndField(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(r.URL.Path, "/")
+	idExists := false
+	for i := 0; i < len(IDs); i++ {
+		if IDs[i] == strings.ToUpper(parts[4]) {
+			idExists = true
+			break
 		}
-
-		if track.UniqueID == idURL["id"] {
-			api := _struct.Track{track.UniqueID, track.Pilot, track.Glider, track.GliderId, track.TrackLength, track.HeaderDate, track.URL, track.TimeRecorded}
-			json.NewEncoder(w).Encode(api)
-		} else {
-			//Handling if user type different id from ids stored
-			http.Error(w, "404 - The trackInfo with that id doesn't exists in our database ", http.StatusNotFound)
-
+	}
+	if !idExists {
+		http.Error(w, "ID out of range.", http.StatusNotFound)
+		return
+	}
+	t, _ := db.Get(strings.ToUpper(parts[4]))
+	if len(parts) == 5 {
+		http.Header.Set(w.Header(), "content.type", "application/json")
+		json.NewEncoder(w).Encode(t)
+	}
+	if len(parts) == 6 {
+		switch strings.ToUpper(parts[5]) {
+		case "PILOT":
+			fmt.Fprint(w, t.Pilot)
+		case "GLIDER":
+			fmt.Fprint(w, t.Glider)
+		case "GLIDER_ID":
+			fmt.Fprint(w, t.GliderId)
+		case "TRACK_LENGTH":
+			fmt.Fprint(w, t.TrackLength)
+		case "H_DATE":
+			fmt.Fprint(w, t.HeaderDate)
+		default:
+			http.Error(w, "Not a valid option", http.StatusNotFound)
+			return
 		}
-
 	}
-
-}
-
-func HandlerTrackIdFIeld(w http.ResponseWriter, r *http.Request) {
-
-	//Handling for GET /api/igc/<id>/<field>
-	http.Header.Set(w.Header(), "content-type", "application/json")
-
-	urlFields := mux.Vars(r)
-
-	var rNum, _ = regexp.Compile(`[a-zA-Z_]+`)
-
-	//attributes := &Attributes{}
-
-	// Regular Expression for IDs
-
-	regExID, _ := regexp.Compile("[0-9]+")
-
-	if !regExID.MatchString(urlFields["id"]) {
-		http.Error(w, "400 - Bad Request, you entered an invalid ID in URL.", http.StatusBadRequest)
-		return
+	if len(parts) > 6 {
+		http.Error(w, "Too many /.", http.StatusNotFound)
 	}
-
-	if !rNum.MatchString(urlFields["field"]) {
-		http.Error(w, "400 - Bad Request, wrong parameters", http.StatusBadRequest)
-		return
-	}
-	client := mongoConnect()
-
-	trackDB := _struct.Track{}
-
-	trackDB = getTrack1(client, urlFields["id"], w)
-	// Taking the field variable from the URL path and converting it to lower case to skip some potential errors
-	field := urlFields["field"]
-
-	api := _struct.Track{trackDB.UniqueID, trackDB.Pilot, trackDB.Glider, trackDB.GliderId, trackDB.TrackLength, trackDB.HeaderDate, trackDB.URL, trackDB.TimeRecorded}
-
-	switch strings.ToUpper(field) {
-	case "UNIQUEID":
-		json.NewEncoder(w).Encode(api.UniqueID)
-	case "PILOT":
-		json.NewEncoder(w).Encode(api.Pilot)
-	case "GLIDER":
-		json.NewEncoder(w).Encode(api.Glider)
-	case "GLIDER_ID":
-		json.NewEncoder(w).Encode(api.GliderId)
-	case "TRACK_LENGTH":
-		json.NewEncoder(w).Encode(api.TrackLength)
-	case "H_DATE":
-		json.NewEncoder(w).Encode(api.HeaderDate)
-	case "URL":
-		json.NewEncoder(w).Encode(api.URL)
-	case "TIMERECORDED":
-		json.NewEncoder(w).Encode(api.TimeRecorded)
-	default:
-		http.Error(w, "Not a valid option", http.StatusNotFound)
-		return
-	}
-
-}
-
-func AdminAPITracksCount(w http.ResponseWriter, r *http.Request) {
-
-	//w.Header().Set("Content-Type", "application/json")
-
-	if r.Method != "GET" {
-		http.Error(w, "501 - Method not implemennted", http.StatusNotImplemented)
-		return
-	}
-
-	client := mongoConnect()
-
-	fmt.Fprintf(w, "Current count of the tracks in DB is: %d", countAllTracks(client))
-}
-
-// Handles path: DELETE /admin/api/track
-// It only works with DELETE method, and this handler deletes all tracks in the DB
-func AdminAPITracks(w http.ResponseWriter, r *http.Request) {
-
-	//w.Header().Set("Content-Type", "application/json")
-
-	if r.Method != "DELETE" {
-		http.Error(w, "501 - Method not implemented", http.StatusNotImplemented)
-		return
-	}
-
-	client := mongoConnect()
-
-	// Notifying the admin first for the current count of the track
-	fmt.Fprintf(w, "Count of the tracks removed from DB is: %d", countAllTracks(client))
-
-	// Deleting all the track in DB
-	deleteAllTracks(client)
-}
+}*/
